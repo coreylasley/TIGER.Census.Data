@@ -12,7 +12,15 @@ namespace CensusData.Extract
 {
     public class Extractor
     {
-
+        /// <summary>
+        /// Extracts data from census.gov and imports it into a database
+        /// </summary>
+        /// <param name="toDatabase">The ISQL implementation representing the database to import the data</param>
+        /// <param name="dataType">The Data Type to be extracted from census.gov and imported</param>
+        /// <param name="downloadPath">The location where the ZIP files should be downloaded to</param>
+        /// <param name="year">The census year data to download</param>
+        /// <param name="recordsPerBatch">The number of records to insert in a single batch</param>
+        /// <returns>Total imported record count</returns>
         public static async Task<long> ExtractData(ISQL toDatabase, Enums.DataTypes dataType, string downloadPath, int year, int recordsPerBatch = 1500)
         {
             
@@ -22,27 +30,30 @@ namespace CensusData.Extract
             
             string unzipFolder = @"\unzipTemp\" + Guid.NewGuid() + @"\";
 
-            await Task.Run( async () =>
+            await Task.Run(async () =>
             {
-                List<ImportDetail> alreadyDone = toDatabase.GetCompletedImportDetailList(dataType);
-
+                
                 Downloader d = new Downloader();
                 List<string> failedDowloads = new List<string>();
 
                 toDatabase.CreateImportDetailTable();
 
-                var addr = await d.GetLinks(year, dataType);
+                // Get all links from the corresponding data page on census.gov
+                List<string> addr = await d.GetLinks(year, dataType);
 
                 int filecount = addr.Count();
                 int curfile = 0;
+
+                // Get a list of IMPORTDETAIL record that indicate the corresponding file has already completed its import
+                List<ImportDetail> alreadyDone = toDatabase.GetCompletedImportDetailList(dataType);
 
                 if (addr.Count == alreadyDone.Count)
                 {
                     total = alreadyDone.Select(x => x.LastRecordNum).Sum();
                 }
-                else
+                else // Only proceed if we have not yet completed the import for this data type...
                 {
-
+                    // Loop through each of the links 
                     foreach (string link in addr)
                     {
                         curfile++;
@@ -50,23 +61,34 @@ namespace CensusData.Extract
 
                         Console.WriteLine(outHeader + link);
 
+                        // Proceed only if this link is not contained in the list of completed files
                         if (!alreadyDone.Where(x => x.URL == link).Any())
                         {
-                            string dl = d.DownloadFile(link, downloadPath).Result;
+                            // Attempt to download the file 
+                            string dl = await d.DownloadFile(link, downloadPath);
 
+                            // Only proceed if the file was successfully downloaded...
                             if (dl != "")
                             {
+                                // Attempt to unzip the downloaded file, and get the name of the "DBF" file from the extract
                                 string fileToImport = d.Unzip(dl, downloadPath + unzipFolder).Where(x => x.ToLower().Contains(".dbf")).FirstOrDefault();
+                                
+                                // Only proceed if we have a DBF file to process...
                                 if (fileToImport != "")
                                 {
+                                    // Attempt to process the file
                                     DetailedReturn thisFile = ImportTigerData(toDatabase, dataType, fileToImport, recordsPerBatch, link, dl);
                                     total += thisFile.TotalRecordsImported + thisFile.TotalRecordsAlreadyInDB;
+                                    
                                     Console.WriteLine(outHeader + thisFile.TotalRecordsImported + " records imported this session. Total records in DB now at: " + total);
+                                    
+                                    // Remove the extracted files and corresponding temporary directory
                                     d.CleanFolder(downloadPath + unzipFolder);
                                 }
                                 else
                                 {
                                     toDatabase.InsertImportDetails(link, "BAD FILE", dataType);
+                                    
                                     Console.WriteLine("No DB file found to import");
                                 }
                             }
@@ -74,6 +96,7 @@ namespace CensusData.Extract
                             {
                                 toDatabase.InsertImportDetails(link, "UNABLE TO DOWNLOAD", dataType);
                                 failedDowloads.Add(link);
+                                
                                 Console.WriteLine("!!!!!! FILE FAILED TO DOWNLOAD: " + link);
                             }
                         }
@@ -95,9 +118,9 @@ namespace CensusData.Extract
             // CREATE the IMPORTDETAIL table in the Database if it doesnt already exist
             toDatabase.CreateImportDetailTable();
 
+            // Make sure the file exists that we wish to import...
             if (File.Exists(fileToImport))
             {
-
                 // Read the dbfFile contents into a DbfTable object
                 using (var dbfTable = new DbfTable(fileToImport, Encoding.UTF8))
                 {
@@ -109,15 +132,18 @@ namespace CensusData.Extract
 
                     ret.TotalRecordsInFile = recordCount;
 
+                    // Get the IMPORTDETAIL record that matches the URL/File we are going to import
                     ImportDetail importDetail = toDatabase.GetImportDetail(referenceURL);
                     if (importDetail == null)
                     {
+                        // If no matching IMPORTDETAIL file was found, create one
                         toDatabase.InsertImportDetails(referenceURL, referenceZipFile, dataType);
                         importDetail = toDatabase.GetImportDetail(referenceURL); //new ImportDetail { URL = referenceURL, LocalFile = referenceZipFile, FileType = dataType.ToString("g"), LastRecordNum = 0 };
                     }
 
                     ret.TotalRecordsAlreadyInDB = importDetail.LastRecordNum;
 
+                    // Proceed only if the record count in the file exceeds that which we have already imported
                     if (recordCount > importDetail.LastRecordNum)
                     {
 
@@ -130,20 +156,12 @@ namespace CensusData.Extract
 
                         // CREATE IF NOT EXISTS our TABLE in the DB
                         toDatabase.ExecuteNonQuery(tableCreate);
-
-                        // Create a string representing all the columns in the TABLE for our INSERT statement
-                        string columnPart = "";
-                        foreach (var dbfColumn in dbfTable.Columns)
-                        {
-                            columnPart += "`" + dbfColumn.Name + "`,";
-                        }
-                        columnPart += "`IMPORTDETAILID`";
+                        
+                        // Create the first part of our INSERT statement
+                        string insertHeader = toDatabase.GetInsertHeader(dbfTable, tableName);
 
                         // Get the records from the DbfTable
                         var dbfRecord = new DbfRecord(dbfTable);
-
-                        // Create the first part of our INSERT statement
-                        string insertHeader = "INSERT INTO " + tableName + " (" + columnPart + ") VALUES ";
 
                         // We are going to INSERT multiple records with each DB Command to dramatically speed things up
                         StringBuilder multiInsert = new StringBuilder();
@@ -162,7 +180,7 @@ namespace CensusData.Extract
                                         continue;
 
                                     int col = -1;
-                                    string rowPart = "";
+                                    StringBuilder rowPart = new StringBuilder();
 
                                     // Loop through each of the values in our record
                                     foreach (var dbfValue in dbfRecord.Values)
@@ -171,13 +189,13 @@ namespace CensusData.Extract
                                         // Get the column type of this value
                                         DbfColumn c = dbfTable.Columns[col];
                                         // Format the value properly for our INSERT statment
-                                        rowPart += toDatabase.FormatValueForInsert(c.ColumnType, dbfValue.ToString()) + ",";
+                                        rowPart.Append(toDatabase.FormatValueForInsert(c.ColumnType, dbfValue.ToString()) + ",");
                                     }
                                     // Add the Import Detail ID for our last column value
-                                    rowPart += importDetail.ID;
+                                    rowPart.Append(importDetail.ID);
 
                                     // Append the record values to our INSERT statement
-                                    multiInsert.Append("(" + rowPart + "),");
+                                    multiInsert.Append("(" + rowPart.ToString() + "),");
 
                                     // If we have collected xxx records...
                                     if (ret.TotalRecordsImported % recordsPerBatch == 0)
@@ -205,7 +223,8 @@ namespace CensusData.Extract
                             }
                             catch (Exception ex)
                             {
-                                Debug.WriteLine(ex.Message);
+                                //Debug.WriteLine(ex.Message);
+                                ret.Errors.Add(ex.Message);
                             }
                         }
 
@@ -227,31 +246,17 @@ namespace CensusData.Extract
                     }
                     else // If we already appeared to have imported all the records in this file
                     {
-                        toDatabase.UpdateImportDetails(referenceURL, Convert.ToInt32(recordCount), true);
+                        toDatabase.UpdateImportDetails(referenceURL, recordCount, true);
                     }
 
                 }
             }
             else // If the file does not exist
             {
-
+                ret.Errors.Add(fileToImport + " was not found.");
             }
 
             return ret;
-        }
-    }
-
-    public class DetailedReturn
-    {
-        public long TotalRecordsInFile { get; set; }
-        public long TotalRecordsAlreadyInDB { get; set; }
-        public long TotalRecordsImported { get; set; }
-        public bool CompletedSuccessfully { get; set; }
-        public List<string> Errors { get; set; }
-
-        public DetailedReturn()
-        {
-            Errors = new List<string>();
         }
     }
 }

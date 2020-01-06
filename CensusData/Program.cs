@@ -34,6 +34,7 @@ namespace CensusData
             // Loop through each of the enum values representing the Tiger data types we can pull
             foreach (DataTypes dt in Enum.GetValues(typeof(DataTypes)).Cast<DataTypes>().ToList())
             {
+                
                 Thread.Sleep(500);
                 // Add this to our action block
                 workerBlock.Post(dt);

@@ -187,6 +187,20 @@ namespace CensusData.Extract
             return ret;
         }
 
+        public string GetInsertHeader(DbfTable dbfTable, string tableName)
+        {
+            // Create a string representing all the columns in the TABLE for our INSERT statement
+            string columnPart = "";
+            foreach (var dbfColumn in dbfTable.Columns)
+            {
+                columnPart += "`" + dbfColumn.Name + "`,";
+            }
+            columnPart += "`IMPORTDETAILID`";
+
+            // Create the first part of our INSERT statement
+            return "INSERT INTO " + tableName + " (" + columnPart + ") VALUES ";
+        }
+
         /// <summary>
         /// Creates a COLUMN definition for the given column that can be used in a CREATE TABLE script
         /// </summary>

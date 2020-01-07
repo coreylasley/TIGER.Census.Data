@@ -23,9 +23,6 @@ namespace CensusData.Extract
         /// <returns>Total imported record count</returns>
         public static async Task<long> ExtractData(ISQL toDatabase, Enums.DataTypes dataType, string downloadPath, int year, int recordsPerBatch = 1500)
         {
-            
-            Console.WriteLine("***** Starting the Extract of: " + dataType.ToString("g") + " data!");
-
             long total = 0;
             
             string unzipFolder = @"\unzipTemp\" + Guid.NewGuid() + @"\";
@@ -57,13 +54,13 @@ namespace CensusData.Extract
                     foreach (string link in addr)
                     {
                         curfile++;
-                        string outHeader = "[" + dataType.ToString("g") + ": " + curfile + "/" + filecount + "]: ";
-
-                        Console.WriteLine(outHeader + link);
-
+                        
                         // Proceed only if this link is not contained in the list of completed files
                         if (!alreadyDone.Where(x => x.URL == link).Any())
                         {
+                            string outHeader = "[" + dataType.ToString("g") + ": " + curfile + "/" + filecount + "]: ";
+                            Console.WriteLine(DateTime.Now.ToLogFormat() + outHeader + link);
+
                             // Attempt to download the file 
                             string dl = await d.DownloadFile(link, downloadPath);
 
@@ -80,7 +77,7 @@ namespace CensusData.Extract
                                     DetailedReturn thisFile = ImportTigerData(toDatabase, dataType, fileToImport, recordsPerBatch, link, dl);
                                     total += thisFile.TotalRecordsImported + thisFile.TotalRecordsAlreadyInDB;
                                     
-                                    Console.WriteLine(outHeader + thisFile.TotalRecordsImported + " records imported this session. Total records in DB now at: " + total);
+                                    Console.WriteLine(DateTime.Now.ToLogFormat() + outHeader + thisFile.TotalRecordsImported + " records imported this session. Total records in DB now at: " + total);
                                     
                                     // Remove the extracted files and corresponding temporary directory
                                     d.CleanFolder(downloadPath + unzipFolder);

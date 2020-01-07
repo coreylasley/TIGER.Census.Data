@@ -12,7 +12,7 @@ namespace CensusData.Extract
     /// <summary>
     /// MySQL implementation of ISQL
     /// </summary>
-    public class MySQL : DbfReader, ISQL
+    public class MySQL : ISQL
     {
             
         public string ConnectionString { get; set; }

@@ -1,52 +1,33 @@
-﻿using System.Text;
+﻿using DbfDataReader;
 using System;
-using System.Diagnostics;
-using MySql.Data.MySqlClient;
-using DbfDataReader;
-using Tiger.Interface;
-using Tiger.Helper;
 using System.Collections.Generic;
-using static Tiger.Helper.Enums;
+using System.Data.SqlClient;
+using System.Diagnostics;
 using Tiger.Entities;
+using Tiger.Interface;
+using static Tiger.Helper.Enums;
 
 namespace Tiger.Extract
 {
-
     /// <summary>
-    /// MySQL implementation of ISQL
+    /// SQL Server implementation of ISQL
     /// </summary>
-    public class MySQL : ISQL
+    public class SQLServer : ISQL
     {
-            
         public string ConnectionString { get; set; }
 
-        /// <summary>
-        /// Creates the IMPORTDETAIL table in the DB, which is used to keep track of import progress
-        /// </summary>
-        /// <returns></returns>
+        
         public bool CreateImportDetailTable()
         {
-            bool ret = true;
-
-            int tblCreated = ExecuteNonQuery("CREATE TABLE IF NOT EXISTS IMPORTDETAIL (ID INT NOT NULL AUTO_INCREMENT PRIMARY KEY, FILETYPE VARCHAR(15),URL VARCHAR(250),LOCALFILE VARCHAR(500),LASTRECORDNUM INT)");
-            if (tblCreated >= 0)
-            {
-                int index = ExecuteCount("SHOW INDEX FROM IMPORTDETAIL WHERE Key_name = 'IDX_URL'");
-                if (index == 0)
-                {
-                    ExecuteNonQuery("CREATE INDEX IDX_URL ON IMPORTDETAIL (URL)");
-                }
-            }
-            else
-                return false;
-
-            return ret;
+            throw new NotImplementedException();
         }
-
         
 
         public string GetCreateTableScript(DbfTable tbl, string tableName)
         {
+            throw new NotImplementedException();
+
+            /*
             string sql = "CREATE TABLE IF NOT EXISTS " + tableName + " (\n";
             string cols = "";
             foreach (var dbfColumn in tbl.Columns)
@@ -59,11 +40,12 @@ namespace Tiger.Extract
             sql += cols + "\n)";
 
             return sql;
+            */
         }
 
         public bool UpdateImportDetails(string URL, long lastRecordNum, bool isImportComplete)
-        {           
-            return ExecuteNonQuery("UPDATE IMPORTDETAIL SET LASTRECORDNUM = " + lastRecordNum + ", ISCOMPLETE = " + (isImportComplete ? "TRUE" : "FALSE") + " WHERE URL = '" + URL + "'") > 0 ? true : false;
+        {
+            return ExecuteNonQuery("UPDATE IMPORTDETAIL SET LASTRECORDNUM = " + lastRecordNum + ", ISCOMPLETE = " + (isImportComplete ? "1" : "0") + " WHERE URL = '" + URL + "'") > 0 ? true : false;
         }
 
         public bool InsertImportDetails(string URL, string localFile, DataTypes dataType)
@@ -71,7 +53,7 @@ namespace Tiger.Extract
             return ExecuteNonQuery("INSERT IMPORTDETAIL SET ISCOMPLETE = FALSE, LASTRECORDNUM = 0, URL = '" + URL + "', FILETYPE = '" + dataType.ToString("g") + "', LOCALFILE = '" + localFile.Replace(@"\", @"\\") + "'") > 0 ? true : false;
         }
 
-       
+
 
         /// <summary>
         /// Executes a DB query and returns the number of records returned in the result
@@ -84,18 +66,19 @@ namespace Tiger.Extract
 
             try
             {
-                MySqlConnection dbCon = new MySqlConnection(ConnectionString);
+                SqlConnection dbCon = new SqlConnection(ConnectionString);
                 dbCon.Open();
 
-                MySqlCommand dbCmd = new MySqlCommand(sql, dbCon);
+                SqlCommand dbCmd = new SqlCommand(sql, dbCon);
                 var r = dbCmd.ExecuteReader();
-                while(r.Read())
+                while (r.Read())
                 {
                     ret++;
                 }
-                dbCon.Close();                                
+                dbCon.Close();
             }
-            catch {
+            catch
+            {
                 ret = -1;
             }
 
@@ -108,10 +91,10 @@ namespace Tiger.Extract
 
             try
             {
-                MySqlConnection dbCon = new MySqlConnection(ConnectionString);
+                SqlConnection dbCon = new SqlConnection(ConnectionString);
                 dbCon.Open();
 
-                MySqlCommand dbCmd = new MySqlCommand("SELECT FILETYPE, LOCALFILE, LASTRECORDNUM, ID, ISCOMPLETE FROM IMPORTDETAIL WHERE URL = '" + url + "'", dbCon);
+                SqlCommand dbCmd = new SqlCommand("SELECT FILETYPE, LOCALFILE, LASTRECORDNUM, ID, ISCOMPLETE FROM IMPORTDETAIL WHERE URL = '" + url + "'", dbCon);
                 var r = dbCmd.ExecuteReader();
                 while (r.Read())
                 {
@@ -134,27 +117,27 @@ namespace Tiger.Extract
             return ret;
         }
 
-        public List<ImportDetail> GetCompletedImportDetailList(Enums.DataTypes dataType)
+        public List<ImportDetail> GetCompletedImportDetailList(DataTypes dataType)
         {
             List<ImportDetail> ret = new List<ImportDetail>();
 
             try
             {
-                MySqlConnection dbCon = new MySqlConnection(ConnectionString);
+                SqlConnection dbCon = new SqlConnection(ConnectionString);
                 dbCon.Open();
 
                 string sql = "SELECT FILETYPE, LOCALFILE, LASTRECORDNUM, ID, URL FROM IMPORTDETAIL WHERE ISCOMPLETE = TRUE AND FILETYPE = '" + dataType.ToString("g") + "'";
-                MySqlCommand dbCmd = new MySqlCommand(sql, dbCon);
+                SqlCommand dbCmd = new SqlCommand(sql, dbCon);
                 var r = dbCmd.ExecuteReader();
                 while (r.Read())
                 {
-                    ImportDetail id = new ImportDetail();                    
+                    ImportDetail id = new ImportDetail();
                     id.FileType = r.GetValue(0).ToString();
                     id.LocalFile = r.GetValue(1).ToString();
                     id.LastRecordNum = Convert.ToInt32(r.GetValue(2));
                     id.ID = Convert.ToInt32(r.GetValue(3));
                     id.URL = r.GetValue(4).ToString();
-                    ret.Add(id);                    
+                    ret.Add(id);
                 }
                 dbCon.Close();
             }
@@ -175,15 +158,16 @@ namespace Tiger.Extract
         {
             int ret = 0;
             try
-            {                
-                MySqlConnection dbCon = new MySqlConnection(ConnectionString);
+            {
+                SqlConnection dbCon = new SqlConnection(ConnectionString);
                 dbCon.Open();
 
-                MySqlCommand dbCmd = new MySqlCommand(sql, dbCon);
+                SqlCommand dbCmd = new SqlCommand(sql, dbCon);
                 ret = dbCmd.ExecuteNonQuery();
-                dbCon.Close();                                
+                dbCon.Close();
             }
-            catch(Exception ex) {
+            catch (Exception ex)
+            {
                 Debug.WriteLine(ex.Message);
             }
 
@@ -196,9 +180,9 @@ namespace Tiger.Extract
             string columnPart = "";
             foreach (var dbfColumn in dbfTable.Columns)
             {
-                columnPart += "`" + dbfColumn.Name + "`,";
+                columnPart += "[" + dbfColumn.Name + "],";
             }
-            columnPart += "`IMPORTDETAILID`";
+            columnPart += "[IMPORTDETAILID]";
 
             // Create the first part of our INSERT statement
             return "INSERT INTO " + tableName + " (" + columnPart + ") VALUES ";
@@ -249,8 +233,8 @@ namespace Tiger.Extract
         public string FormatValueForInsert(DbfColumnType colType, string value)
         {
             string ret = "";
-            
-            switch(colType)
+
+            switch (colType)
             {
                 case DbfColumnType.Boolean:
                     ret = (Convert.ToBoolean(value) == true ? "1" : "0");
@@ -264,18 +248,16 @@ namespace Tiger.Extract
                 case DbfColumnType.Float:
                 case DbfColumnType.Number:
                 case DbfColumnType.Signedlong:
-                    if (value == "") 
+                    if (value == "")
                         value = "NULL";
-                    ret = value.Replace("$","");
+                    ret = value.Replace("$", "");
                     break;
                 default:
-                    ret = "'" + value.Replace("'","''") + "'";
+                    ret = "'" + value.Replace("'", "''") + "'";
                     break;
             }
 
             return ret;
-        }       
-
-       
+        }
     }
 }

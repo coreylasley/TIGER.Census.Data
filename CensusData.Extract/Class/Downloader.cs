@@ -6,11 +6,10 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Threading.Tasks;
-using static CensusData.Extract.Enums;
+using static Tiger.Helper.Enums;
 
-namespace CensusData.Extract
+namespace Tiger
 {
     public class Downloader
     {

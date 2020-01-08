@@ -5,10 +5,13 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using System.Threading;
 using System.IO;
+using Tiger.Entities;
+using Tiger.Interface;
+using static Tiger.Helper.Enums;
+using Tiger.Helper;
 
-namespace CensusData.Extract
+namespace Tiger
 {
     public class Extractor
     {
@@ -21,9 +24,9 @@ namespace CensusData.Extract
         /// <param name="year">The census year data to download</param>
         /// <param name="recordsPerBatch">The number of records to insert in a single batch</param>
         /// <returns>Total imported record count</returns>
-        public static async Task<long> ExtractData(ISQL toDatabase, Enums.DataTypes dataType, string downloadPath, int year, int recordsPerBatch = 1500)
+        public static async Task<DetailedReturn> ExtractData(ISQL toDatabase, DataTypes dataType, string downloadPath, int year, int recordsPerBatch = 1500)
         {
-            long total = 0;
+            DetailedReturn ret = new DetailedReturn();
             
             string unzipFolder = @"\unzipTemp\" + Guid.NewGuid() + @"\";
 
@@ -46,7 +49,7 @@ namespace CensusData.Extract
 
                 if (addr.Count == alreadyDone.Count)
                 {
-                    total = alreadyDone.Select(x => x.LastRecordNum).Sum();
+                    ret.TotalRecordsAlreadyInDB = alreadyDone.Select(x => x.LastRecordNum).Sum();
                 }
                 else // Only proceed if we have not yet completed the import for this data type...
                 {
@@ -75,26 +78,28 @@ namespace CensusData.Extract
                                 {
                                     // Attempt to process the file
                                     DetailedReturn thisFile = ImportTigerData(toDatabase, dataType, fileToImport, recordsPerBatch, link, dl);
-                                    total += thisFile.TotalRecordsImported + thisFile.TotalRecordsAlreadyInDB;
+                                    ret.TotalRecordsImported += thisFile.TotalRecordsImported;
+                                    ret.TotalRecordsAlreadyInDB += thisFile.TotalRecordsAlreadyInDB;
+                                    ret.TotalRecordsInFile += thisFile.TotalRecordsInFile;
+                                    ret.Errors.AddRange(thisFile.Errors);
                                     
-                                    Console.WriteLine(DateTime.Now.ToLogFormat() + outHeader + thisFile.TotalRecordsImported + " records imported this session. Total records in DB now at: " + total);
+                                    Console.WriteLine(DateTime.Now.ToLogFormat() + outHeader + thisFile.TotalRecordsImported + " records imported this session. Total records in DB now at: " + ret);
                                     
                                     // Remove the extracted files and corresponding temporary directory
                                     d.CleanFolder(downloadPath + unzipFolder);
                                 }
                                 else
                                 {
-                                    toDatabase.InsertImportDetails(link, "BAD FILE", dataType);
-                                    
-                                    Console.WriteLine("No DB file found to import");
+                                    toDatabase.InsertImportDetails(link, "BAD FILE", dataType);                                    
+                                    ret.Errors.Add(new ErrorDetail(ErrorTypes.BadOrMissingLocalFile, dataType, "No DB file found to import", link, ""));
                                 }
                             }
                             else
                             {
                                 toDatabase.InsertImportDetails(link, "UNABLE TO DOWNLOAD", dataType);
                                 failedDowloads.Add(link);
-                                
-                                Console.WriteLine("!!!!!! FILE FAILED TO DOWNLOAD: " + link);
+
+                                ret.Errors.Add(new ErrorDetail(ErrorTypes.CouldNotDownloadFile, dataType, "Failed to download", link, ""));
                             }
                         }
 
@@ -102,16 +107,14 @@ namespace CensusData.Extract
                 }
             });
 
-            return total;
+            return ret;
         }
 
 
-        private static DetailedReturn ImportTigerData(ISQL toDatabase, Enums.DataTypes dataType, string fileToImport, int recordsPerBatch, string referenceURL, string referenceZipFile)
+        private static DetailedReturn ImportTigerData(ISQL toDatabase, DataTypes dataType, string fileToImport, int recordsPerBatch, string referenceURL, string referenceZipFile)
         {
             DetailedReturn ret = new DetailedReturn();
-            
-            Downloader d = new Downloader();
-
+                        
             // CREATE the IMPORTDETAIL table in the Database if it doesnt already exist
             toDatabase.CreateImportDetailTable();
 
@@ -210,8 +213,7 @@ namespace CensusData.Extract
                                         // Prepare the next mass INSERT statement
                                         multiInsert.Clear();
                                         multiInsert.Append(insertHeader);
-
-                                        //Debug.WriteLine(ret);
+                                                                                
                                     }
                                 }
 
@@ -221,7 +223,7 @@ namespace CensusData.Extract
                             catch (Exception ex)
                             {
                                 //Debug.WriteLine(ex.Message);
-                                ret.Errors.Add(ex.Message);
+                                ret.Errors.Add(new ErrorDetail(ErrorTypes.Exception, dataType, ex.Message, referenceURL, fileToImport));
                             }
                         }
 
@@ -249,8 +251,8 @@ namespace CensusData.Extract
                 }
             }
             else // If the file does not exist
-            {
-                ret.Errors.Add(fileToImport + " was not found.");
+            {                
+                ret.Errors.Add(new ErrorDetail(ErrorTypes.BadOrMissingLocalFile, dataType, "File not found", referenceURL, fileToImport));
             }
 
             return ret;

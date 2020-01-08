@@ -2,8 +2,10 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Tiger.Entities;
+using static Tiger.Helper.Enums;
 
-namespace CensusData.Extract
+namespace Tiger.Interface
 {
     public interface ISQL
     {
@@ -37,7 +39,7 @@ namespace CensusData.Extract
         /// <param name="localFile"></param>
         /// <param name="dataType"></param>
         /// <returns>boolean indicating success</returns>
-        bool InsertImportDetails(string URL, string localFile, Enums.DataTypes dataType);
+        bool InsertImportDetails(string URL, string localFile, DataTypes dataType);
 
         /// <summary>
         /// Returns a total record count for a specified SQL command
@@ -58,7 +60,7 @@ namespace CensusData.Extract
         /// </summary>
         /// <param name="dataType"></param>
         /// <returns>List of ImportDetail objects</returns>
-        List<ImportDetail> GetCompletedImportDetailList(Enums.DataTypes dataType);
+        List<ImportDetail> GetCompletedImportDetailList(DataTypes dataType);
 
         /// <summary>
         /// Executes a non-query command against the database, and returns the number of records impacted

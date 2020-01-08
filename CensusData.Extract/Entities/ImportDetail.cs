@@ -1,4 +1,4 @@
-﻿namespace CensusData.Extract
+﻿namespace Tiger.Entities
 {
     public class ImportDetail
     {

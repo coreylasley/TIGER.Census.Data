@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace CensusData.Extract
+namespace Tiger.Helper
 {
     public class DetailedReturn
     {
@@ -8,11 +8,11 @@ namespace CensusData.Extract
         public long TotalRecordsAlreadyInDB { get; set; }
         public long TotalRecordsImported { get; set; }
         public bool CompletedSuccessfully { get; set; }
-        public List<string> Errors { get; set; }
+        public List<ErrorDetail> Errors { get; set; }
 
         public DetailedReturn()
         {
-            Errors = new List<string>();
+            Errors = new List<ErrorDetail>();
         }
     }
 }

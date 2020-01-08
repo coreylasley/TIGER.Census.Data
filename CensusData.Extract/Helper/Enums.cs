@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace CensusData.Extract
+namespace Tiger.Helper
 {
     public class Enums
     {
@@ -61,6 +61,15 @@ namespace CensusData.Extract
             UAC,
             UNSD,
             ZCTA5
+        }
+
+        public enum ErrorTypes
+        {
+            Exception,
+            BadOrMissingLocalFile,
+            CouldNotDownloadFile,
+            FailedToUnzip,
+            FailedToDelete
         }
     }
 }

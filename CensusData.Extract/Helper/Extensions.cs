@@ -1,9 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using static Tiger.Helper.Enums;
 
-using static CensusData.Extract.Enums;
-
-namespace CensusData
+namespace Tiger
 {
     public static class Extensions
     {
